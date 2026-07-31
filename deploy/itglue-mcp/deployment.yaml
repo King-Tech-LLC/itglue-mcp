@@ -1,0 +1,111 @@
+# Single-replica Deployment for the vendored itglue-mcp Streamable-HTTP MCP
+# server. Mirrors the toggl-mcp deployment shape (KIA-5).
+#
+# Image is PINNED to an immutable digest (vendor-and-pin, program spec §3).
+# `:latest` is intentionally not used so pod recreations land on a known-good
+# image. To roll forward: resolve the new digest (see deploy/README.md) and
+# `kubectl apply -f deploy/itglue-mcp/deployment.yaml`.
+#
+# The wyre image runs as non-root uid 1001 and is stateless (no runtime FS
+# writes — confirmed in the vendoring review), so readOnlyRootFilesystem is
+# safe. A /tmp emptyDir is mounted as cheap insurance for any libc/TLS temp use.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: itglue-mcp
+  namespace: itglue-mcp
+  labels:
+    app.kubernetes.io/name: itglue-mcp
+    app.kubernetes.io/part-of: kt-icg-agent
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: itglue-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: itglue-mcp
+        app.kubernetes.io/part-of: kt-icg-agent
+        app.kubernetes.io/component: server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: itglue-mcp
+          # PINNED digest for ghcr.io/wyre-technology/itglue-mcp:latest as of
+          # 2026-07-31 (v1.5.3, commit c52c750). Bump via deploy/README.md.
+          image: ghcr.io/wyre-technology/itglue-mcp@sha256:dfd476ce8def3ce12a7a1eaf9f4850942b65f1c31b3d4118781fef880280689b
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          # Non-secret config in plain env; the IT Glue API key comes from the
+          # out-of-band Secret via envFrom. ITGLUE_REGION defaults to us.
+          env:
+            - name: MCP_TRANSPORT
+              value: "http"
+            - name: MCP_HTTP_HOST
+              value: "0.0.0.0"
+            - name: MCP_HTTP_PORT
+              value: "8080"
+            - name: ITGLUE_REGION
+              value: "us"
+          # itglue-mcp-itglue holds ITGLUE_API_KEY (a READ-ONLY IT Glue key —
+          # layer-2 of the read-first model). Created out of band (README). If
+          # missing the pod fails fast, which is the intended behaviour.
+          envFrom:
+            - secretRef:
+                name: itglue-mcp-itglue
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

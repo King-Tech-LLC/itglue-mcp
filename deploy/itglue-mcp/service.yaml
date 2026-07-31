@@ -1,0 +1,21 @@
+# ClusterIP Service in front of the itglue-mcp Deployment.
+# Listens on :80 (Ingress points here on 80) and forwards to the container's
+# :8080. Tailscale Ingress is the only external exposure — no LoadBalancer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: itglue-mcp
+  namespace: itglue-mcp
+  labels:
+    app.kubernetes.io/name: itglue-mcp
+    app.kubernetes.io/part-of: kt-icg-agent
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: itglue-mcp
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
