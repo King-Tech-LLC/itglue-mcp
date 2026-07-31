@@ -1,0 +1,16 @@
+# Dedicated namespace for the itglue-mcp MCP server (vendored wyre-technology).
+# Restricted pod-security: the image runs as non-root uid 1001 with a read-only
+# root FS and dropped caps, so it satisfies `restricted` cleanly. Locking the
+# namespace means a future regression that drops securityContext fails admission
+# rather than silently running privileged.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: itglue-mcp
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    app.kubernetes.io/name: itglue-mcp
+    app.kubernetes.io/part-of: kt-icg-agent

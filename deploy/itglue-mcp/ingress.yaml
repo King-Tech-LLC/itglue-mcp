@@ -1,0 +1,26 @@
+# Tailscale Ingress — registers a tailnet device `itglue-mcp` and a Let's
+# Encrypt cert at https://itglue-mcp.tail3cab53.ts.net. Same pattern as
+# toggl-mcp. Requires the Tailscale Kubernetes operator + MagicDNS/HTTPS on the
+# tailnet (already true for tail3cab53.ts.net). defaultBackend routes every path
+# (/health and /mcp) to the Service without path-rewrite gymnastics.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: itglue-mcp-tailscale
+  namespace: itglue-mcp
+  labels:
+    app.kubernetes.io/name: itglue-mcp
+    app.kubernetes.io/part-of: kt-icg-agent
+spec:
+  ingressClassName: tailscale
+  # tls.hosts is the short tailnet name (NOT the FQDN) — tells the operator to
+  # register device `itglue-mcp` and request a cert for
+  # itglue-mcp.tail3cab53.ts.net.
+  tls:
+    - hosts:
+        - itglue-mcp
+  defaultBackend:
+    service:
+      name: itglue-mcp
+      port:
+        number: 80
